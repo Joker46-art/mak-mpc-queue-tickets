@@ -1,4 +1,3 @@
-
 import { db } from "../firebase";
 import { 
   collection, 
@@ -12,7 +11,8 @@ import {
   updateDoc,
   onSnapshot,
   serverTimestamp,
-  deleteDoc
+  deleteDoc,
+  Timestamp
 } from "firebase/firestore";
 import { UserInfo } from "@/components/UserInfoForm";
 
@@ -44,22 +44,36 @@ export const createTicket = async (category: CategoryType, userInfo: UserInfo): 
   try {
     const ticketsRef = collection(db, "tickets");
     
-    // Get the latest ticket number for this category
+    // Get the latest ticket number for this category - change the query to avoid complex indexing
     const categoryPrefix = CATEGORY_CODES[category];
+    
+    // Modified: Get all tickets of this category and sort in memory
     const q = query(
       ticketsRef,
-      where("category", "==", category),
-      orderBy("timestamp", "desc"),
-      limit(1)
+      where("category", "==", category)
     );
     
     const querySnapshot = await getDocs(q);
     let nextNumber = 1;
     
     if (!querySnapshot.empty) {
-      const latestTicket = querySnapshot.docs[0].data() as Ticket;
-      const currentNumber = parseInt(latestTicket.code.substring(categoryPrefix.length));
-      nextNumber = currentNumber >= MAX_TICKET_NUMBER ? 1 : currentNumber + 1;
+      const tickets = querySnapshot.docs.map(doc => ({
+        ...doc.data(),
+        id: doc.id
+      }));
+      
+      // Sort in memory instead of using Firestore orderBy
+      const sortedTickets = tickets.sort((a, b) => {
+        const timeA = a.timestamp instanceof Timestamp ? a.timestamp.toDate().getTime() : new Date(a.timestamp).getTime();
+        const timeB = b.timestamp instanceof Timestamp ? b.timestamp.toDate().getTime() : new Date(b.timestamp).getTime();
+        return timeB - timeA; // Descending order
+      });
+      
+      if (sortedTickets.length > 0) {
+        const latestTicket = sortedTickets[0] as any;
+        const currentNumber = parseInt(latestTicket.code.substring(categoryPrefix.length));
+        nextNumber = currentNumber >= MAX_TICKET_NUMBER ? 1 : currentNumber + 1;
+      }
     }
     
     // Format the number with leading zero
@@ -91,11 +105,10 @@ export const createTicket = async (category: CategoryType, userInfo: UserInfo): 
 export const getNextTicket = async (): Promise<Ticket | null> => {
   try {
     const ticketsRef = collection(db, "tickets");
+    // Modified: First get waiting tickets
     const q = query(
       ticketsRef,
-      where("status", "==", "waiting"),
-      orderBy("timestamp", "asc"),
-      limit(1)
+      where("status", "==", "waiting")
     );
     
     const querySnapshot = await getDocs(q);
@@ -104,11 +117,19 @@ export const getNextTicket = async (): Promise<Ticket | null> => {
       return null;
     }
     
-    const nextTicket = {
-      id: querySnapshot.docs[0].id,
-      ...querySnapshot.docs[0].data(),
-      timestamp: querySnapshot.docs[0].data().timestamp?.toDate() || new Date()
-    } as Ticket;
+    // Sort tickets in memory
+    const tickets = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      timestamp: doc.data().timestamp?.toDate() || new Date()
+    })) as Ticket[];
+    
+    // Sort by timestamp (oldest first)
+    const sortedTickets = tickets.sort((a, b) => 
+      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
+    
+    const nextTicket = sortedTickets[0];
     
     // Update the ticket status to 'serving'
     await updateDoc(doc(ticketsRef, nextTicket.id), {
@@ -141,9 +162,7 @@ export const subscribeToCurrentTicket = (
   const ticketsRef = collection(db, "tickets");
   const q = query(
     ticketsRef,
-    where("status", "==", "serving"),
-    orderBy("timestamp", "desc"),
-    limit(1)
+    where("status", "==", "serving")
   );
   
   return onSnapshot(q, (querySnapshot) => {
@@ -152,13 +171,19 @@ export const subscribeToCurrentTicket = (
       return;
     }
     
-    const currentTicket = {
-      id: querySnapshot.docs[0].id,
-      ...querySnapshot.docs[0].data(),
-      timestamp: querySnapshot.docs[0].data().timestamp?.toDate() || new Date()
-    } as Ticket;
+    // Get all serving tickets and sort in memory
+    const tickets = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      timestamp: doc.data().timestamp?.toDate() || new Date()
+    })) as Ticket[];
     
-    callback(currentTicket);
+    // Sort by timestamp (newest first)
+    const sortedTickets = tickets.sort((a, b) => 
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+    
+    callback(sortedTickets[0]);
   });
 };
 
@@ -168,8 +193,7 @@ export const subscribeToWaitingTickets = (
   const ticketsRef = collection(db, "tickets");
   const q = query(
     ticketsRef,
-    where("status", "==", "waiting"),
-    orderBy("timestamp", "asc")
+    where("status", "==", "waiting")
   );
   
   return onSnapshot(q, (querySnapshot) => {
@@ -183,7 +207,12 @@ export const subscribeToWaitingTickets = (
       } as Ticket);
     });
     
-    callback(tickets);
+    // Sort by timestamp (oldest first)
+    const sortedTickets = tickets.sort((a, b) => 
+      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
+    
+    callback(sortedTickets);
   });
 };
 
@@ -191,7 +220,7 @@ export const getAllTickets = (
   callback: (tickets: Ticket[]) => void
 ) => {
   const ticketsRef = collection(db, "tickets");
-  const q = query(ticketsRef, orderBy("timestamp", "desc"));
+  const q = query(ticketsRef);
   
   return onSnapshot(q, (querySnapshot) => {
     const tickets: Ticket[] = [];
@@ -204,7 +233,12 @@ export const getAllTickets = (
       } as Ticket);
     });
     
-    callback(tickets);
+    // Sort by timestamp (newest first)
+    const sortedTickets = tickets.sort((a, b) => 
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+    
+    callback(sortedTickets);
   });
 };
 

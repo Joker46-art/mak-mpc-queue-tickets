@@ -3,10 +3,12 @@ import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { CategoryType, createTicket, Ticket, subscribeToWaitingTickets } from '@/services/queueService';
-import { Ticket as TicketIcon } from 'lucide-react';
+import { Ticket as TicketIcon, CheckCircle } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import UserInfoForm, { UserInfo } from './UserInfoForm';
 import WaitingList from './WaitingList';
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useNavigate } from 'react-router-dom';
 
 const categories: { id: CategoryType; label: string; }[] = [
   { id: 'withdraw', label: 'Withdraw' },
@@ -23,6 +25,7 @@ const CustomerView: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [waitingTickets, setWaitingTickets] = useState<Ticket[]>([]);
+  const [showSuccess, setShowSuccess] = useState(false);
 
   useEffect(() => {
     const unsubscribe = subscribeToWaitingTickets((tickets) => {
@@ -34,6 +37,7 @@ const CustomerView: React.FC = () => {
 
   const handleCategorySelect = (category: CategoryType) => {
     setSelectedCategory(category);
+    setShowSuccess(false);
   };
 
   const handleOpenForm = () => {
@@ -56,9 +60,11 @@ const CustomerView: React.FC = () => {
       const ticket = await createTicket(selectedCategory, userInfo);
       setGeneratedTicket(ticket);
       setIsFormOpen(false);
+      setShowSuccess(true);
+      
       toast({
-        title: "Ticket Generated",
-        description: `Your ticket number is ${ticket.code}`,
+        title: "Ticket Generated Successfully",
+        description: `Your ticket number is ${ticket.code}. Please proceed to the waiting area.`,
       });
     } catch (error) {
       console.error("Error generating ticket:", error);
@@ -75,6 +81,7 @@ const CustomerView: React.FC = () => {
   const resetSelection = () => {
     setSelectedCategory(null);
     setGeneratedTicket(null);
+    setShowSuccess(false);
   };
 
   return (
@@ -102,6 +109,18 @@ const CustomerView: React.FC = () => {
               </Button>
             ))}
           </div>
+
+          {showSuccess && generatedTicket && (
+            <Alert className="mt-4 bg-green-50 border-green-200 text-green-800">
+              <AlertDescription className="flex items-center gap-2">
+                <CheckCircle className="h-5 w-5 text-green-600" />
+                <div>
+                  <span className="font-bold">Ticket created successfully!</span> 
+                  <p>Please proceed to the waiting area. Your number will be called shortly.</p>
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
 
           {generatedTicket && (
             <div className="mt-8 text-center">
