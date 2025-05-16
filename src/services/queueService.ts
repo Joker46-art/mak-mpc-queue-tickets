@@ -14,6 +14,7 @@ import {
   serverTimestamp,
   deleteDoc
 } from "firebase/firestore";
+import { UserInfo } from "@/components/UserInfoForm";
 
 export type CategoryType = 'withdraw' | 'saving' | 'loan' | 'loan-releasing' | 'insurance' | 'member';
 
@@ -24,6 +25,7 @@ export interface Ticket {
   timestamp: Date;
   status: 'waiting' | 'serving' | 'completed';
   counterNumber?: number;
+  userInfo?: UserInfo;
 }
 
 const CATEGORY_CODES: Record<CategoryType, string> = {
@@ -38,7 +40,7 @@ const CATEGORY_CODES: Record<CategoryType, string> = {
 // Maximum number for each category
 const MAX_TICKET_NUMBER = 50;
 
-export const createTicket = async (category: CategoryType): Promise<Ticket> => {
+export const createTicket = async (category: CategoryType, userInfo: UserInfo): Promise<Ticket> => {
   try {
     const ticketsRef = collection(db, "tickets");
     
@@ -69,12 +71,14 @@ export const createTicket = async (category: CategoryType): Promise<Ticket> => {
       code,
       category,
       timestamp: new Date(),
-      status: 'waiting'
+      status: 'waiting',
+      userInfo
     };
     
     await setDoc(doc(ticketsRef, newTicket.id), {
       ...newTicket,
-      timestamp: serverTimestamp()
+      timestamp: serverTimestamp(),
+      userInfo
     });
     
     return newTicket;
@@ -102,7 +106,8 @@ export const getNextTicket = async (): Promise<Ticket | null> => {
     
     const nextTicket = {
       id: querySnapshot.docs[0].id,
-      ...querySnapshot.docs[0].data()
+      ...querySnapshot.docs[0].data(),
+      timestamp: querySnapshot.docs[0].data().timestamp?.toDate() || new Date()
     } as Ticket;
     
     // Update the ticket status to 'serving'
@@ -154,6 +159,52 @@ export const subscribeToCurrentTicket = (
     } as Ticket;
     
     callback(currentTicket);
+  });
+};
+
+export const subscribeToWaitingTickets = (
+  callback: (tickets: Ticket[]) => void
+) => {
+  const ticketsRef = collection(db, "tickets");
+  const q = query(
+    ticketsRef,
+    where("status", "==", "waiting"),
+    orderBy("timestamp", "asc")
+  );
+  
+  return onSnapshot(q, (querySnapshot) => {
+    const tickets: Ticket[] = [];
+    querySnapshot.forEach((doc) => {
+      const data = doc.data();
+      tickets.push({
+        id: doc.id,
+        ...data,
+        timestamp: data.timestamp?.toDate() || new Date()
+      } as Ticket);
+    });
+    
+    callback(tickets);
+  });
+};
+
+export const getAllTickets = (
+  callback: (tickets: Ticket[]) => void
+) => {
+  const ticketsRef = collection(db, "tickets");
+  const q = query(ticketsRef, orderBy("timestamp", "desc"));
+  
+  return onSnapshot(q, (querySnapshot) => {
+    const tickets: Ticket[] = [];
+    querySnapshot.forEach((doc) => {
+      const data = doc.data();
+      tickets.push({
+        id: doc.id,
+        ...data,
+        timestamp: data.timestamp?.toDate() || new Date()
+      } as Ticket);
+    });
+    
+    callback(tickets);
   });
 };
 

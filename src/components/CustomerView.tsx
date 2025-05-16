@@ -1,10 +1,12 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { CategoryType, createTicket, Ticket } from '@/services/queueService';
+import { CategoryType, createTicket, Ticket, subscribeToWaitingTickets } from '@/services/queueService';
 import { Ticket as TicketIcon } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import UserInfoForm, { UserInfo } from './UserInfoForm';
+import WaitingList from './WaitingList';
 
 const categories: { id: CategoryType; label: string; }[] = [
   { id: 'withdraw', label: 'Withdraw' },
@@ -19,12 +21,22 @@ const CustomerView: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<CategoryType | null>(null);
   const [generatedTicket, setGeneratedTicket] = useState<Ticket | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [waitingTickets, setWaitingTickets] = useState<Ticket[]>([]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToWaitingTickets((tickets) => {
+      setWaitingTickets(tickets);
+    });
+    
+    return () => unsubscribe();
+  }, []);
 
   const handleCategorySelect = (category: CategoryType) => {
     setSelectedCategory(category);
   };
 
-  const handleGenerateTicket = async () => {
+  const handleOpenForm = () => {
     if (!selectedCategory) {
       toast({
         title: "Error",
@@ -33,11 +45,17 @@ const CustomerView: React.FC = () => {
       });
       return;
     }
+    setIsFormOpen(true);
+  };
+
+  const handleFormSubmit = async (userInfo: UserInfo) => {
+    if (!selectedCategory) return;
 
     setIsLoading(true);
     try {
-      const ticket = await createTicket(selectedCategory);
+      const ticket = await createTicket(selectedCategory, userInfo);
       setGeneratedTicket(ticket);
+      setIsFormOpen(false);
       toast({
         title: "Ticket Generated",
         description: `Your ticket number is ${ticket.code}`,
@@ -60,64 +78,82 @@ const CustomerView: React.FC = () => {
   };
 
   return (
-    <Card className="w-full max-w-2xl mx-auto shadow-lg">
-      <CardHeader className="bg-queue-primary text-white text-center rounded-t-lg">
-        <CardTitle className="text-2xl font-bold">Welcome to MAK MPC</CardTitle>
-        <p className="text-lg">Choose your category</p>
-      </CardHeader>
-      
-      <CardContent className="pt-6 pb-4">
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          {categories.map((category) => (
-            <Button
-              key={category.id}
-              variant={selectedCategory === category.id ? "default" : "outline"}
-              className={`h-24 transition-all ${
-                selectedCategory === category.id 
-                ? "bg-queue-primary text-white" 
-                : "hover:bg-queue-light hover:text-queue-dark"
-              }`}
-              onClick={() => handleCategorySelect(category.id)}
-            >
-              {category.label}
-            </Button>
-          ))}
-        </div>
-
-        {generatedTicket && (
-          <div className="mt-8 text-center">
-            <div className="bg-queue-light text-queue-dark rounded-lg p-6 max-w-md mx-auto">
-              <h3 className="text-xl mb-2">Your code ticket is:</h3>
-              <div className="flex items-center justify-center gap-2">
-                <TicketIcon className="h-8 w-8" />
-                <span className="text-4xl font-bold">{generatedTicket.code}</span>
-              </div>
-              <p className="mt-4 text-sm">Please wait for your number to be called.</p>
-            </div>
-          </div>
-        )}
-      </CardContent>
-      
-      <CardFooter className="flex justify-center gap-4 pt-2 pb-6">
-        <Button 
-          className="w-full md:w-auto bg-queue-primary hover:bg-queue-secondary min-w-[180px]"
-          disabled={isLoading || !selectedCategory}
-          onClick={handleGenerateTicket}
-        >
-          {isLoading ? "Generating..." : "Create Code Ticket"}
-        </Button>
+    <div className="space-y-6">
+      <Card className="w-full max-w-2xl mx-auto shadow-lg">
+        <CardHeader className="bg-queue-primary text-white text-center rounded-t-lg">
+          <CardTitle className="text-2xl font-bold">Welcome to MAK MPC</CardTitle>
+          <p className="text-lg">Choose your category</p>
+        </CardHeader>
         
-        {generatedTicket && (
+        <CardContent className="pt-6 pb-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            {categories.map((category) => (
+              <Button
+                key={category.id}
+                variant={selectedCategory === category.id ? "default" : "outline"}
+                className={`h-24 transition-all ${
+                  selectedCategory === category.id 
+                  ? "bg-queue-primary text-white" 
+                  : "hover:bg-queue-light hover:text-queue-dark"
+                }`}
+                onClick={() => handleCategorySelect(category.id)}
+              >
+                {category.label}
+              </Button>
+            ))}
+          </div>
+
+          {generatedTicket && (
+            <div className="mt-8 text-center">
+              <div className="bg-queue-light text-queue-dark rounded-lg p-6 max-w-md mx-auto">
+                <h3 className="text-xl mb-2">Your code ticket is:</h3>
+                <div className="flex items-center justify-center gap-2">
+                  <TicketIcon className="h-8 w-8" />
+                  <span className="text-4xl font-bold">{generatedTicket.code}</span>
+                </div>
+                <div className="mt-4">
+                  <p className="text-sm mb-1"><strong>Name:</strong> {generatedTicket.userInfo?.name}</p>
+                  <p className="text-sm mb-1"><strong>Contact:</strong> {generatedTicket.userInfo?.contactNumber}</p>
+                  <p className="text-sm mb-3"><strong>Location:</strong> {generatedTicket.userInfo?.location}</p>
+                  <p className="text-sm">Please wait for your number to be called.</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+        
+        <CardFooter className="flex justify-center gap-4 pt-2 pb-6">
           <Button 
-            variant="outline"
-            className="w-full md:w-auto min-w-[180px]"
-            onClick={resetSelection}
+            className="w-full md:w-auto bg-queue-primary hover:bg-queue-secondary min-w-[180px]"
+            disabled={isLoading || !selectedCategory}
+            onClick={handleOpenForm}
           >
-            Get Another Ticket
+            {isLoading ? "Generating..." : "Create Code Ticket"}
           </Button>
-        )}
-      </CardFooter>
-    </Card>
+          
+          {generatedTicket && (
+            <Button 
+              variant="outline"
+              className="w-full md:w-auto min-w-[180px]"
+              onClick={resetSelection}
+            >
+              Get Another Ticket
+            </Button>
+          )}
+        </CardFooter>
+      </Card>
+
+      {/* User information form modal */}
+      <UserInfoForm 
+        isOpen={isFormOpen} 
+        onClose={() => setIsFormOpen(false)} 
+        onSubmit={handleFormSubmit} 
+        category={selectedCategory}
+      />
+
+      {/* Waiting list */}
+      <WaitingList tickets={waitingTickets} currentTicket={generatedTicket} />
+    </div>
   );
 };
 
