@@ -1,3 +1,4 @@
+
 import { db } from "../firebase";
 import { 
   collection, 
@@ -63,9 +64,9 @@ export const createTicket = async (category: CategoryType, userInfo: UserInfo): 
       }));
       
       // Sort in memory instead of using Firestore orderBy
-      const sortedTickets = tickets.sort((a, b) => {
-        const timeA = a.timestamp instanceof Timestamp ? a.timestamp.toDate().getTime() : new Date(a.timestamp).getTime();
-        const timeB = b.timestamp instanceof Timestamp ? b.timestamp.toDate().getTime() : new Date(b.timestamp).getTime();
+      const sortedTickets = tickets.sort((a: any, b: any) => {
+        const timeA = a.timestamp instanceof Timestamp ? a.timestamp.toDate().getTime() : a.timestamp ? new Date(a.timestamp).getTime() : 0;
+        const timeB = b.timestamp instanceof Timestamp ? b.timestamp.toDate().getTime() : b.timestamp ? new Date(b.timestamp).getTime() : 0;
         return timeB - timeA; // Descending order
       });
       
