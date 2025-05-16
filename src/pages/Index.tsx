@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import CustomerView from '@/components/CustomerView';
 import TellerView from '@/components/TellerView';
 import DisplayBoard from '@/components/DisplayBoard';
+import QueueSystemExplanation from '@/components/QueueSystemExplanation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const Index = () => {
@@ -24,10 +25,11 @@ const Index = () => {
             onValueChange={setView}
             className="w-full max-w-3xl"
           >
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="customer">Customer</TabsTrigger>
               <TabsTrigger value="teller">Teller</TabsTrigger>
               <TabsTrigger value="display">Display Board</TabsTrigger>
+              <TabsTrigger value="help">How It Works</TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
@@ -36,10 +38,11 @@ const Index = () => {
           {view === "customer" && <CustomerView />}
           {view === "teller" && <TellerView />}
           {view === "display" && <DisplayBoard />}
+          {view === "help" && <QueueSystemExplanation />}
         </div>
         
         {/* In a real application, the Display Board would typically be on a separate screen */}
-        {view !== "display" && (
+        {view !== "display" && view !== "help" && (
           <div className="mt-12 border-t pt-8">
             <h2 className="text-xl font-semibold mb-4 text-center text-gray-700">Public Display Preview</h2>
             <DisplayBoard />
